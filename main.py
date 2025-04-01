@@ -10,15 +10,28 @@ import numpy as np
 from io import BytesIO
 from fastapi.responses import StreamingResponse
 from urllib.parse import quote
+from fastapi.middleware.cors import CORSMiddleware
+import logging
 
-app = FastAPI()
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(max_request_size=50 * 1024 * 1024)  # 50MB limit
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Templates for rendering HTML
 templates = Jinja2Templates(directory="templates")
 
 # In-memory storage for files
 in_memory_files = {}
-
 
 def process_las_file(file_content: bytes) -> BytesIO:
     """Process LAS file content in memory and create PNG image"""
@@ -63,19 +76,19 @@ def process_las_file(file_content: bytes) -> BytesIO:
         return img_buffer
 
     except Exception as e:
+        logger.error(f"Error processing LAS file: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Error processing LAS file: {str(e)}")
-
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
     try:
         return templates.TemplateResponse("index.html", {"request": request})
     except Exception as e:
+        logger.error(f"Template error: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={"error": f"Template error: {str(e)}"}
         )
-
 
 @app.post("/upload/")
 async def upload_files(files: List[UploadFile]):
@@ -83,13 +96,16 @@ async def upload_files(files: List[UploadFile]):
         raise HTTPException(status_code=400, detail="No files were uploaded")
 
     results = []
+    processed_files = 0
 
     for file in files:
+        file_id = str(uuid.uuid4())
         try:
             if not file.filename.lower().endswith('.las') and not file.filename.lower().endswith('.laz'):
-                raise HTTPException(status_code=400, detail="Only LAS/LAZ files are allowed")
+                logger.warning(f"Invalid file type: {file.filename}")
+                continue
 
-            file_id = str(uuid.uuid4())
+            logger.info(f"Processing file: {file.filename}")
             file_content = await file.read()
 
             # Process and create visualization
@@ -103,41 +119,57 @@ async def upload_files(files: List[UploadFile]):
                 "filename": f"{original_name}_processed.png",
                 "download_url": f"/download/?file_id={file_id}"
             })
+            processed_files += 1
 
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.error(f"Error processing file {file.filename}: {str(e)}")
+            continue
+
+    if not results:
+        raise HTTPException(
+            status_code=400,
+            detail="No valid LAS/LAZ files were processed"
+        )
 
     return JSONResponse({
         "results": results,
-        "message": f"Processed {len(results)} file(s)"
+        "message": f"Successfully processed {processed_files} file(s)"
     })
-
 
 @app.get("/download/")
 async def download_file(file_id: str):
-    if file_id not in in_memory_files:
-        raise HTTPException(status_code=404, detail="File not found")
+    try:
+        if file_id not in in_memory_files:
+            raise HTTPException(status_code=404, detail="File not found")
 
-    img_buffer = in_memory_files[file_id]
-    del in_memory_files[file_id]
+        img_buffer = in_memory_files[file_id]
+        img_buffer.seek(0)
 
-    img_buffer.seek(0)
+        # Кодируем имя файла для безопасного использования в URL
+        safe_filename = quote(f"processed_{file_id}.png")
 
-    # Кодируем имя файла для безопасного использования в URL
-    safe_filename = quote(f"processed_{file_id}.png")
-
-    return StreamingResponse(
-        img_buffer,
-        media_type="image/png",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{safe_filename}"}
-    )
-
+        return StreamingResponse(
+            img_buffer,
+            media_type="image/png",
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{safe_filename}",
+                "Cache-Control": "no-store"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Download error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
-async def test():
-    return {"message": "Server is running!"}
+async def health_check():
+    return {"status": "healthy", "message": "Server is running!"}
+
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 8080))  # Используйте PORT из Railway или 8000 по умолчанию
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(
+        app,
+        host="0.0.0.0",  # Важно для Render!
+        port=int(os.getenv("PORT", 8000)),  # Render использует переменную PORT
+        log_level="info"
+    )
