@@ -170,6 +170,6 @@ if __name__ == "__main__":
     uvicorn.run(
         app,
         host="0.0.0.0",  # Важно для Render!
-        port=int(os.getenv("PORT", 8000)),  # Render использует переменную PORT
+        port=int(os.getenv("PORT", 10000)),  # Render использует переменную PORT
         log_level="info"
     )
