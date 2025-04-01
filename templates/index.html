@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LAS/LAZ Cloud Processor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-3.0.0.min.js"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        .file-drop-area {
+            border: 2px dashed #3b82f6;
+            transition: all 0.3s;
+        }
+        .file-drop-area.active {
+            border-color: #10b981;
+            background-color: #f0fdf4;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 h-full">
+    <div id="app" class="min-h-full flex flex-col">
+        <!-- Навигация -->
+        <nav class="bg-white shadow-sm">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between h-16">
+                    <div class="flex items-center">
+                        <h1 class="text-xl font-bold text-gray-900">LAS/LAZ Cloud Processor</h1>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <button @click="currentTab = 'upload'"
+                                class="px-3 py-2 rounded-md text-sm font-medium"
+                                :class="currentTab === 'upload' ? 'bg-blue-100 text-blue-800' : 'text-gray-700 hover:bg-gray-100'">
+                            Upload
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </nav>
+        <!-- Основное содержимое -->
+        <main class="flex-grow p-6 max-w-7xl mx-auto w-full">
+            <!-- Вкладка загрузки -->
+            <div v-show="currentTab === 'upload'" class="space-y-8">
+                <!-- Область загрузки -->
+                <div class="file-drop-area rounded-lg p-8 text-center"
+                     @dragover.prevent="fileDragOver = true"
+                     @dragleave="fileDragOver = false"
+                     @drop.prevent="handleFileDrop($event)"
+                     :class="{'active': fileDragOver}">
+                    <input type="file" id="fileInput" @change="handleFiles" multiple accept=".las,.laz" class="hidden">
+                    <label for="fileInput" class="cursor-pointer">
+                        <div class="flex flex-col items-center justify-center space-y-4">
+                            <svg class="w-16 h-16 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                            </svg>
+                            <h2 class="text-xl font-semibold">Drag & drop LAS/LAZ files here</h2>
+                            <p class="text-gray-500">or click to browse files</p>
+                            <button class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 transition">
+                                Select Files
+                            </button>
+                        </div>
+                    </label>
+                </div>
+                <!-- Выбранные файлы -->
+                <div v-show="files.length > 0" class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-medium mb-4">Selected Files</h3>
+                    <div class="space-y-3">
+                        <div v-for="(file, index) in files" :key="file.name + index" class="flex items-center justify-between p-3 border rounded-lg">
+                            <div class="flex items-center space-x-3">
+                                <span class="font-medium">${ file.name }</span>
+                                <span class="text-sm text-gray-500">${ formatFileSize(file.size) }</span>
+                            </div>
+                            <button @click="removeFile(index)" class="text-red-500 hover:text-red-700">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end">
+                        <button @click="uploadFiles"
+                                class="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 transition flex items-center"
+                                :disabled="uploading">
+                            <span>${ uploading ? 'Processing...' : 'Process Files' }</span>
+                            <svg v-show="uploading" class="animate-spin ml-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <!-- Результаты -->
+                <div v-show="results.length > 0" class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-medium mb-4">Processing Results</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div v-for="result in results" :key="result.fileId" class="border rounded-lg overflow-hidden">
+                            <div class="p-4 bg-gray-50 border-b">
+                                <h4 class="font-medium">${ result.filename }</h4>
+                            </div>
+                            <div class="p-4">
+                                <div :id="'plot-' + result.fileId" class="h-64"></div>
+                                <div class="mt-4 flex justify-end space-x-3">
+                                    <a :href="result.downloadUrl" class="text-blue-600 hover:text-blue-800 flex items-center">
+                                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                        </svg>
+                                        Download
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        <!-- Подвал -->
+        <footer class="bg-white border-t py-4">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-sm text-gray-500">
+                LAS/LAZ Cloud Processor © 2023
+            </div>
+        </footer>
+    </div>
+    <script>
+        const { createApp, ref } = Vue;
+        createApp({
+            delimiters: ['${', '}'], // Устанавливаем пользовательские разделители для Vue.js
+            setup() {
+                const currentTab = ref('upload');
+                const files = ref([]);
+                const results = ref([]);
+                const uploading = ref(false);
+                const fileDragOver = ref(false);
+
+                const formatFileSize = (bytes) => {
+                    if (bytes === 0) return '0 Bytes';
+                    const k = 1024;
+                    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+                };
+
+                const handleFileDrop = (event) => {
+                    fileDragOver.value = false;
+                    handleFiles(event);
+                };
+
+                const handleFiles = (event) => {
+                    const newFiles = Array.from(event.dataTransfer ? event.dataTransfer.files : event.target.files);
+                    files.value = [...files.value, ...newFiles];
+                    event.target.value = '';
+                };
+
+                const removeFile = (index) => {
+                    files.value.splice(index, 1);
+                };
+
+                const uploadFiles = async () => {
+                    if (files.value.length === 0) return;
+                    uploading.value = true;
+                    results.value = [];
+                    try {
+                        const formData = new FormData();
+                        files.value.forEach(file => formData.append('files', file));
+                        const response = await fetch('/upload/', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        if (!response.ok) {
+                            throw new Error('Server error');
+                        }
+                        const data = await response.json();
+                        results.value = data.results.map(result => ({
+                            fileId: result.file_id,
+                            filename: result.filename,
+                            downloadUrl: result.download_url
+                        }));
+                    } catch (error) {
+                        console.error('Upload failed:', error);
+                        alert('Error processing files: ' + error.message);
+                    } finally {
+                        uploading.value = false;
+                        files.value = [];
+                    }
+                };
+
+                const renderPlot = (result) => {
+                    const plotData = [{
+                        y: result.data?.depth || [],
+                        x: result.data?.values || [],
+                        type: 'scatter',
+                        mode: 'lines',
+                        name: result.data?.name || 'Unknown'
+                    }];
+                    const layout = {
+                        title: result.data?.name || 'Unknown',
+                        xaxis: { title: result.data?.name || 'Values' },
+                        yaxis: { title: 'Depth', autorange: 'reversed' },
+                        margin: { t: 30, l: 50, r: 30, b: 50 }
+                    };
+                    Plotly.newPlot('plot-' + result.fileId, plotData, layout, { responsive: true });
+                };
+
+                return {
+                    currentTab,
+                    files,
+                    results,
+                    uploading,
+                    fileDragOver,
+                    formatFileSize,
+                    handleFileDrop,
+                    handleFiles,
+                    removeFile,
+                    uploadFiles
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
