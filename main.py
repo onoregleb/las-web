@@ -164,12 +164,3 @@ async def download_file(file_id: str):
 async def health_check():
     return {"status": "healthy", "message": "Server is running!"}
 
-
-# if __name__ == "__main__":
-#     import uvicorn
-#     uvicorn.run(
-#         app,
-#         host="0.0.0.0",  # Важно для Render!
-#         port=int(os.getenv("PORT", 10000)),  # Render использует переменную PORT
-#         log_level="info"
-#     )
