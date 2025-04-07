@@ -33,6 +33,21 @@ templates = Jinja2Templates(directory="templates")
 # In-memory storage for files
 in_memory_files = {}
 
+def generate_random_features(output_dir, filename, shape=(100, 100)):
+    """Генерирует рандомные npy файлы"""
+    features = np.random.rand(*shape)  # Генерация случайных данных
+    output_path = os.path.join(output_dir, f"{filename}.npy")
+    np.save(output_path, features)
+    return output_path
+
+def generate_image_from_las(data, output_path):
+    """Генерация картинок из las-файлов"""
+    plt.figure(figsize=(8, 6))
+    plt.imshow(data, cmap='viridis')
+    plt.colorbar()
+    plt.savefig(output_path)
+    plt.close()
+
 def process_las_file(file_content: bytes) -> BytesIO:
     """Process LAS file content in memory and create PNG image"""
     try:
