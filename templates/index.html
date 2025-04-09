@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LAS/LAZ Cloud Processor</title>
+    <title>LAS/LAZ Cloud Processor - MultiStage</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.plot.ly/plotly-3.0.0.min.js"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <style>
         .file-drop-area {
@@ -16,121 +15,267 @@
             border-color: #10b981;
             background-color: #f0fdf4;
         }
+        .processing-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #09f;
+            animation: spin 1s ease infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="bg-gray-50 h-full">
     <div id="app" class="min-h-full flex flex-col">
-        <!-- Навигация -->
         <nav class="bg-white shadow-sm">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="flex justify-between h-16">
                     <div class="flex items-center">
-                        <h1 class="text-xl font-bold text-gray-900">LAS/LAZ Cloud Processor</h1>
+                        <h1 class="text-xl font-bold text-gray-900">LAS/LAZ Multi-Stage Processor</h1>
                     </div>
-                    <div class="flex items-center space-x-4">
-                        <button @click="currentTab = 'upload'"
-                                class="px-3 py-2 rounded-md text-sm font-medium"
-                                :class="currentTab === 'upload' ? 'bg-blue-100 text-blue-800' : 'text-gray-700 hover:bg-gray-100'">
-                            Upload
-                        </button>
                     </div>
-                </div>
             </div>
         </nav>
-        <!-- Основное содержимое -->
+
         <main class="flex-grow p-6 max-w-7xl mx-auto w-full">
-            <!-- Вкладка загрузки -->
-            <div v-show="currentTab === 'upload'" class="space-y-8">
-                <!-- Область загрузки -->
-                <div class="file-drop-area rounded-lg p-8 text-center"
-                     @dragover.prevent="fileDragOver = true"
-                     @dragleave="fileDragOver = false"
-                     @drop.prevent="handleFileDrop($event)"
-                     :class="{'active': fileDragOver}">
-                    <input type="file" id="fileInput" @change="handleFiles" multiple accept=".las,.laz" class="hidden">
-                    <label for="fileInput" class="cursor-pointer">
-                        <div class="flex flex-col items-center justify-center space-y-4">
-                            <svg class="w-16 h-16 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-                            </svg>
-                            <h2 class="text-xl font-semibold">Drag & drop LAS/LAZ files here</h2>
-                            <p class="text-gray-500">or click to browse files</p>
-                            <button class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 transition">
-                                Select Files
-                            </button>
-                        </div>
-                    </label>
-                </div>
-                <!-- Выбранные файлы -->
-                <div v-show="files.length > 0" class="bg-white rounded-lg shadow p-6">
-                    <h3 class="text-lg font-medium mb-4">Selected Files</h3>
-                    <div class="space-y-3">
-                        <div v-for="(file, index) in files" :key="file.name + index" class="flex items-center justify-between p-3 border rounded-lg">
-                            <div class="flex items-center space-x-3">
-                                <span class="font-medium">${ file.name }</span>
-                                <span class="text-sm text-gray-500">${ formatFileSize(file.size) }</span>
+            <div class="space-y-8">
+
+                <section v-if="currentStage === 'upload'">
+                    <h2 class="text-2xl font-semibold mb-4 text-gray-800">Step 1: Upload LAS/LAZ Files</h2>
+                    <div class="file-drop-area rounded-lg p-8 text-center relative"
+                         @dragover.prevent="fileDragOver = true"
+                         @dragleave="fileDragOver = false"
+                         @drop.prevent="handleFileDrop($event)"
+                         :class="{'active': fileDragOver}">
+                        <input type="file" id="fileInput" @change="handleFiles" multiple accept=".las,.laz" class="hidden">
+                        <label for="fileInput" class="cursor-pointer">
+                            <div class="flex flex-col items-center justify-center space-y-4">
+                                <svg class="w-16 h-16 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                                </svg>
+                                <h3 class="text-xl font-semibold">Drag & drop LAS/LAZ files here</h3>
+                                <p class="text-gray-500">or click to browse files</p>
+                                <button class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 transition">
+                                    Select Files
+                                </button>
                             </div>
-                            <button @click="removeFile(index)" class="text-red-500 hover:text-red-700">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </label>
+                        <div v-if="isUploading" class="processing-overlay rounded-lg">
+                             <div class="flex flex-col items-center">
+                                <div class="spinner"></div>
+                                <p class="mt-2 text-gray-700 font-medium">Uploading...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="lasFiles.length > 0" class="mt-6 bg-white rounded-lg shadow p-6">
+                        <h3 class="text-lg font-medium mb-4">Selected Files (${ lasFiles.length })</h3>
+                        <div class="space-y-3 max-h-60 overflow-y-auto">
+                            <div v-for="(file, index) in lasFiles" :key="file.uniqueId" class="flex items-center justify-between p-3 border rounded-lg">
+                                <div class="flex items-center space-x-3">
+                                    <span class="font-medium">${ file.file.name }</span>
+                                    <span class="text-sm text-gray-500">${ formatFileSize(file.file.size) }</span>
+                                </div>
+                                <button @click="removeFile(index)" class="text-red-500 hover:text-red-700" :disabled="isUploading">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mt-6 flex justify-end">
+                            <button @click="uploadLasFiles"
+                                    class="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 transition flex items-center"
+                                    :disabled="isUploading || lasFiles.length === 0">
+                                <span v-if="!isUploading">Upload Files & Proceed</span>
+                                <span v-else>Uploading...</span>
+                                <svg v-show="isUploading" class="animate-spin ml-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                 </svg>
                             </button>
                         </div>
                     </div>
-                    <div class="mt-6 flex justify-end">
-                        <button @click="uploadFiles"
-                                class="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 transition flex items-center"
-                                :disabled="uploading">
-                            <span>${ uploading ? 'Processing...' : 'Process Files' }</span>
-                            <svg v-show="uploading" class="animate-spin ml-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-                <!-- Результаты -->
-                <div v-show="results.length > 0" class="bg-white rounded-lg shadow p-6">
-                    <h3 class="text-lg font-medium mb-4">Processing Results</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div v-for="result in results" :key="result.fileId" class="border rounded-lg overflow-hidden">
-                            <div class="p-4 bg-gray-50 border-b">
-                                <h4 class="font-medium">${ result.filename }</h4>
+                </section>
+
+                <section v-if="currentStage === 'processing' || currentStage === 'results'">
+                    <h2 class="text-2xl font-semibold mb-4 text-gray-800">Step 2: Generate NPY Files</h2>
+                    <div class="bg-white rounded-lg shadow p-6 relative">
+                         <div v-if="isProcessingNpy" class="processing-overlay rounded-lg">
+                            <div class="flex flex-col items-center">
+                                <div class="spinner"></div>
+                                <p class="mt-2 text-gray-700 font-medium">Generating NPY files...</p>
                             </div>
-                            <div class="p-4">
-                                <div :id="'plot-' + result.fileId" class="h-64"></div>
-                                <div class="mt-4 flex justify-end space-x-3">
-                                    <a :href="result.downloadUrl" class="text-blue-600 hover:text-blue-800 flex items-center">
-                                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                                        </svg>
-                                        Download
-                                    </a>
+                        </div>
+                        <div v-if="!npyResults && !isProcessingNpy && uploadedLasInfo.length > 0">
+                            <p class="mb-4 text-gray-600">Uploaded ${ uploadedLasInfo.length } LAS/LAZ file(s). Ready to generate NPY files.</p>
+                            <button @click="generateNpy"
+                                    class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 transition"
+                                    :disabled="isProcessingNpy">
+                                Generate NPY Files
+                            </button>
+                        </div>
+                        <div v-if="npyResults">
+                            <h3 class="text-lg font-medium mb-4">NPY Generation Results</h3>
+                             <div v-if="npyError" class="mb-4 p-4 bg-red-100 text-red-700 border border-red-300 rounded">
+                                Error generating NPY files: ${ npyError }
+                            </div>
+                            <p v-if="npyResults.length > 0" class="mb-4 text-green-600">Successfully generated ${ npyResults.length } NPY file(s).</p>
+                            <ul class="space-y-2">
+                                <li v-for="result in npyResults" :key="result.npyFileId" class="flex items-center justify-between p-2 border rounded">
+                                    <span>${ result.filename } (from ${ result.originalLasName })</span>
+                                    <a :href="result.downloadUrl" class="text-blue-600 hover:text-blue-800 text-sm">Download NPY</a>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+
+                 <section v-if="(currentStage === 'processing' || currentStage === 'results') && npyResults && !npyError">
+                    <h2 class="text-2xl font-semibold mb-4 mt-8 text-gray-800">Step 3: Generate Images from NPY</h2>
+                    <div class="bg-white rounded-lg shadow p-6 relative">
+                         <div v-if="isProcessingNpyImages" class="processing-overlay rounded-lg">
+                             <div class="flex flex-col items-center">
+                                <div class="spinner"></div>
+                                <p class="mt-2 text-gray-700 font-medium">Generating images from NPY...</p>
+                            </div>
+                        </div>
+                         <div v-if="!npyImageResults && !isProcessingNpyImages">
+                             <p class="mb-4 text-gray-600">Ready to generate images from the ${ npyResults.length } NPY file(s).</p>
+                            <button @click="generateImagesFromNpy"
+                                    class="bg-purple-600 text-white px-6 py-2 rounded-md hover:bg-purple-700 transition"
+                                    :disabled="isProcessingNpyImages">
+                                Generate Images
+                            </button>
+                        </div>
+                         <div v-if="npyImageResults">
+                            <h3 class="text-lg font-medium mb-4">NPY Image Generation Results</h3>
+                             <div v-if="npyImageError" class="mb-4 p-4 bg-red-100 text-red-700 border border-red-300 rounded">
+                                Error generating images from NPY: ${ npyImageError }
+                            </div>
+                             <p v-if="npyImageResults.length > 0 && !npyImageError" class="mb-4 text-green-600">Successfully generated ${ npyImageResults.length } image(s) from NPY.</p>
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                <div v-for="imgResult in npyImageResults" :key="imgResult.imageId" class="border rounded-lg overflow-hidden flex flex-col">
+                                    <div class="p-4 bg-gray-50 border-b">
+                                        <h4 class="font-medium truncate" :title="imgResult.filename">${ imgResult.filename }</h4>
+                                        <p class="text-sm text-gray-500">From: ${ imgResult.sourceNpyName }</p>
+                                    </div>
+                                    <div class="p-4 flex-grow flex flex-col justify-between">
+                                        <img :src="imgResult.previewUrl" alt="Generated image" class="w-full h-auto object-contain mb-4 max-h-48">
+                                        <a :href="imgResult.downloadUrl" class="text-blue-600 hover:text-blue-800 text-sm self-end">Download Image</a>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                </section>
+
+                 <section v-if="(currentStage === 'processing' || currentStage === 'results') && uploadedLasInfo.length > 0">
+                     <h2 class="text-2xl font-semibold mb-4 mt-8 text-gray-800">Step 4: Generate RGB Images from LAS</h2>
+                     <div class="bg-white rounded-lg shadow p-6 relative">
+                           <div v-if="isProcessingLasRgbImages" class="processing-overlay rounded-lg">
+                             <div class="flex flex-col items-center">
+                                <div class="spinner"></div>
+                                <p class="mt-2 text-gray-700 font-medium">Generating RGB images from LAS...</p>
+                            </div>
+                        </div>
+                          <div v-if="!lasRgbImageResults && !isProcessingLasRgbImages">
+                             <p class="mb-4 text-gray-600">Ready to generate RGB images directly from the ${ uploadedLasInfo.length } original LAS file(s).</p>
+                            <button @click="generateLasRgbImages"
+                                    class="bg-teal-600 text-white px-6 py-2 rounded-md hover:bg-teal-700 transition"
+                                    :disabled="isProcessingLasRgbImages">
+                                Generate RGB Images
+                            </button>
+                        </div>
+                         <div v-if="lasRgbImageResults">
+                            <h3 class="text-lg font-medium mb-4">LAS RGB Image Generation Results</h3>
+                             <div v-if="lasRgbImageError" class="mb-4 p-4 bg-red-100 text-red-700 border border-red-300 rounded">
+                                Error generating RGB images from LAS: ${ lasRgbImageError }
+                            </div>
+                             <p v-if="lasRgbImageResults.length > 0 && !lasRgbImageError" class="mb-4 text-green-600">Successfully generated ${ lasRgbImageResults.length } RGB image(s) from LAS.</p>
+                             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                <div v-for="imgResult in lasRgbImageResults" :key="imgResult.imageId" class="border rounded-lg overflow-hidden flex flex-col">
+                                    <div class="p-4 bg-gray-50 border-b">
+                                        <h4 class="font-medium truncate" :title="imgResult.filename">${ imgResult.filename }</h4>
+                                        <p class="text-sm text-gray-500">From: ${ imgResult.sourceLasName }</p>
+                                    </div>
+                                    <div class="p-4 flex-grow flex flex-col justify-between">
+                                        <img :src="imgResult.previewUrl" alt="Generated RGB image" class="w-full h-auto object-contain mb-4 max-h-48">
+                                        <a :href="imgResult.downloadUrl" class="text-blue-600 hover:text-blue-800 text-sm self-end">Download Image</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <div v-if="currentStage === 'results'" class="mt-10 text-center">
+                     <button @click="resetProcess" class="bg-gray-500 text-white px-6 py-2 rounded-md hover:bg-gray-600 transition">
+                         Start Over
+                     </button>
+                 </div>
+
             </div>
         </main>
-        <!-- Подвал -->
-        <footer class="bg-white border-t py-4">
+
+        <footer class="bg-white border-t py-4 mt-8">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-sm text-gray-500">
-                LAS/LAZ Cloud Processor © 2025
+                LAS/LAZ Multi-Stage Processor © 2025
             </div>
         </footer>
     </div>
-    <script>
-        const { createApp, ref } = Vue;
-        createApp({
-            delimiters: ['${', '}'], // Устанавливаем пользовательские разделители для Vue.js
-            setup() {
-                const currentTab = ref('upload');
-                const files = ref([]);
-                const results = ref([]);
-                const uploading = ref(false);
-                const fileDragOver = ref(false);
 
+    <script>
+        const { createApp, ref, computed, nextTick } = Vue;
+
+        createApp({
+            delimiters: ['${', '}'], // Пользовательские разделители Vue.js
+            setup() {
+                // --- State Management ---
+                const currentStage = ref('upload'); // 'upload', 'processing', 'results'
+                const fileDragOver = ref(false);
+                const lasFiles = ref([]); // Массив объектов { file: File, uniqueId: string }
+                const uploadedLasInfo = ref([]); // Информация о загруженных LAS файлах [{ lasFileId: string, originalName: string }, ...]
+                const npyResults = ref(null); // Результаты генерации NPY [{ npyFileId: string, filename: string, downloadUrl: string, originalLasName: string, sourceLasId: string }, ...]
+                const npyImageResults = ref(null); // Результаты генерации картинок из NPY [{ imageId: string, filename: string, previewUrl: string, downloadUrl: string, sourceNpyName: string, sourceNpyId: string }, ...]
+                 const lasRgbImageResults = ref(null); // Результаты генерации RGB картинок из LAS [{ imageId: string, filename: string, previewUrl: string, downloadUrl: string, sourceLasName: string, sourceLasId: string }, ...]
+
+                // Loading states
+                const isUploading = ref(false);
+                const isProcessingNpy = ref(false);
+                const isProcessingNpyImages = ref(false);
+                 const isProcessingLasRgbImages = ref(false);
+
+                 // Error states
+                 const uploadError = ref(null);
+                 const npyError = ref(null);
+                 const npyImageError = ref(null);
+                 const lasRgbImageError = ref(null);
+
+
+                // --- Computed Properties ---
+                const hasNpyResults = computed(() => npyResults.value && npyResults.value.length > 0);
+                const hasNpyImageResults = computed(() => npyImageResults.value && npyImageResults.value.length > 0);
+                const hasLasRgbImageResults = computed(() => lasRgbImageResults.value && lasRgbImageResults.value.length > 0);
+
+
+                // --- Methods ---
                 const formatFileSize = (bytes) => {
                     if (bytes === 0) return '0 Bytes';
                     const k = 1024;
@@ -145,72 +290,257 @@
                 };
 
                 const handleFiles = (event) => {
-                    const newFiles = Array.from(event.dataTransfer ? event.dataTransfer.files : event.target.files);
-                    files.value = [...files.value, ...newFiles];
-                    event.target.value = '';
-                };
+                    if (isUploading.value) return; // Не добавлять файлы во время загрузки
+                    const newFiles = Array.from(event.dataTransfer ? event.dataTransfer.files : event.target.files)
+                                         .filter(file => file.name.toLowerCase().endsWith('.las') || file.name.toLowerCase().endsWith('.laz'));
 
-                const removeFile = (index) => {
-                    files.value.splice(index, 1);
-                };
+                    const newFileObjects = newFiles.map(file => ({
+                        file: file,
+                        uniqueId: `${file.name}-${file.size}-${Date.now()}` // Простой уникальный ID
+                    }));
+                    lasFiles.value = [...lasFiles.value, ...newFileObjects];
 
-                const uploadFiles = async () => {
-                    if (files.value.length === 0) return;
-                    uploading.value = true;
-                    results.value = [];
-                    try {
-                        const formData = new FormData();
-                        files.value.forEach(file => formData.append('files', file));
-                        const response = await fetch('/upload/', {
-                            method: 'POST',
-                            body: formData
-                        });
-                        if (!response.ok) {
-                            throw new Error('Server error');
-                        }
-                        const data = await response.json();
-                        results.value = data.results.map(result => ({
-                            fileId: result.file_id,
-                            filename: result.filename,
-                            downloadUrl: result.download_url
-                        }));
-                    } catch (error) {
-                        console.error('Upload failed:', error);
-                        alert('Error processing files: ' + error.message);
-                    } finally {
-                        uploading.value = false;
-                        files.value = [];
+                    // Очистка input type="file" для возможности повторной загрузки того же файла
+                    if (event.target && event.target.value) {
+                       event.target.value = '';
                     }
                 };
 
-                const renderPlot = (result) => {
-                    const plotData = [{
-                        y: result.data?.depth || [],
-                        x: result.data?.values || [],
-                        type: 'scatter',
-                        mode: 'lines',
-                        name: result.data?.name || 'Unknown'
-                    }];
-                    const layout = {
-                        title: result.data?.name || 'Unknown',
-                        xaxis: { title: result.data?.name || 'Values' },
-                        yaxis: { title: 'Depth', autorange: 'reversed' },
-                        margin: { t: 30, l: 50, r: 30, b: 50 }
-                    };
-                    Plotly.newPlot('plot-' + result.fileId, plotData, layout, { responsive: true });
+                const removeFile = (index) => {
+                     if (isUploading.value) return;
+                    lasFiles.value.splice(index, 1);
+                };
+
+                // --- Stage 1: Upload LAS Files ---
+                const uploadLasFiles = async () => {
+                    if (lasFiles.value.length === 0 || isUploading.value) return;
+
+                    isUploading.value = true;
+                    uploadError.value = null;
+                    currentStage.value = 'upload'; // Остаемся на этапе загрузки, но с индикатором
+
+                    try {
+                        const formData = new FormData();
+                        lasFiles.value.forEach(fileObj => formData.append('files', fileObj.file));
+
+                        // ПРЕДПОЛАГАЕМЫЙ БЭКЕНД ЭНДПОИНТ:
+                        // Должен принять файлы, сохранить их (на диск/облако)
+                        // и вернуть массив объектов с ID и оригинальным именем
+                        // Пример ответа: { success: true, uploaded_files: [{ lasFileId: "uuid1", originalName: "file1.las" }, ...] }
+                        const response = await fetch('/api/v1/las/upload', { // <<< ИЗМЕНИТЬ URL ЭНДПОИНТА
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        if (!response.ok) {
+                             const errorData = await response.json().catch(() => ({ detail: 'Server error during upload.' }));
+                            throw new Error(errorData.detail || `HTTP error ${response.status}`);
+                        }
+
+                        const data = await response.json();
+
+                         if (!data.success || !data.uploaded_files) {
+                             throw new Error(data.message || 'Upload response format incorrect.');
+                         }
+
+                        uploadedLasInfo.value = data.uploaded_files; // Сохраняем ID и имена загруженных файлов
+                        lasFiles.value = []; // Очищаем список выбранных файлов
+                        currentStage.value = 'processing'; // Переходим к следующему этапу
+
+                    } catch (error) {
+                        console.error('Upload failed:', error);
+                        uploadError.value = 'Upload failed: ' + error.message;
+                        alert('Error uploading files: ' + error.message); // Оповещение пользователю
+                        currentStage.value = 'upload'; // Остаемся на этапе загрузки при ошибке
+                    } finally {
+                        isUploading.value = false;
+                    }
+                };
+
+                // --- Stage 2: Generate NPY Files ---
+                const generateNpy = async () => {
+                    if (uploadedLasInfo.value.length === 0 || isProcessingNpy.value) return;
+
+                    isProcessingNpy.value = true;
+                    npyError.value = null;
+                    npyResults.value = null; // Очищаем предыдущие результаты NPY
+
+                    try {
+                        const lasIds = uploadedLasInfo.value.map(f => f.lasFileId);
+
+                        // ПРЕДПОЛАГАЕМЫЙ БЭКЕНД ЭНДПОИНТ:
+                        // Принимает список ID LAS-файлов. Генерирует NPY. Сохраняет их.
+                        // Возвращает массив объектов с инфо о NPY файлах.
+                        // Пример ответа: { success: true, npy_files: [{ npyFileId: "npy_uuid1", filename: "file1.npy", downloadUrl: "/download/npy/npy_uuid1", sourceLasId: "uuid1", originalLasName: "file1.las" }, ...] }
+                        const response = await fetch('/api/v1/npy/generate', { // <<< ИЗМЕНИТЬ URL ЭНДПОИНТА
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ lasFileIds: lasIds })
+                        });
+
+                        if (!response.ok) {
+                            const errorData = await response.json().catch(() => ({ detail: 'Server error during NPY generation.' }));
+                            throw new Error(errorData.detail || `HTTP error ${response.status}`);
+                        }
+
+                         const data = await response.json();
+                         if (!data.success || !data.npy_files) {
+                             throw new Error(data.message || 'NPY generation response format incorrect.');
+                         }
+
+                        npyResults.value = data.npy_files; // Сохраняем результаты NPY
+                        currentStage.value = 'results'; // Показываем все результаты
+
+                    } catch (error) {
+                        console.error('NPY generation failed:', error);
+                        npyError.value = 'NPY generation failed: ' + error.message;
+                        currentStage.value = 'processing'; // Остаемся на этапе обработки, чтобы показать ошибку
+                    } finally {
+                        isProcessingNpy.value = false;
+                    }
+                };
+
+                // --- Stage 3: Generate Images from NPY ---
+                const generateImagesFromNpy = async () => {
+                    if (!npyResults.value || npyResults.value.length === 0 || isProcessingNpyImages.value) return;
+
+                    isProcessingNpyImages.value = true;
+                    npyImageError.value = null;
+                    npyImageResults.value = null; // Очищаем предыдущие
+
+                    try {
+                         const npyIds = npyResults.value.map(r => r.npyFileId);
+                         const sourceNpyNames = npyResults.value.reduce((acc, r) => { acc[r.npyFileId] = r.filename; return acc; }, {});
+
+
+                         // ПРЕДПОЛАГАЕМЫЙ БЭКЕНД ЭНДПОИНТ:
+                        // Принимает список ID NPY-файлов. Генерирует картинки. Сохраняет их.
+                        // Возвращает массив объектов с инфо о картинках.
+                        // Пример ответа: { success: true, images: [{ imageId: "img_uuid1", filename: "file1_npy.png", previewUrl: "/preview/img/img_uuid1", downloadUrl: "/download/img/img_uuid1", sourceNpyId: "npy_uuid1" }, ...] }
+                        const response = await fetch('/api/v1/images/from-npy', { // <<< ИЗМЕНИТЬ URL ЭНДПОИНТА
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ npyFileIds: npyIds })
+                        });
+
+                         if (!response.ok) {
+                            const errorData = await response.json().catch(() => ({ detail: 'Server error during NPY image generation.' }));
+                            throw new Error(errorData.detail || `HTTP error ${response.status}`);
+                        }
+
+                         const data = await response.json();
+                          if (!data.success || !data.images) {
+                             throw new Error(data.message || 'NPY image generation response format incorrect.');
+                         }
+
+                        // Добавляем имя исходного NPY файла для отображения
+                        npyImageResults.value = data.images.map(img => ({
+                             ...img,
+                            sourceNpyName: sourceNpyNames[img.sourceNpyId] || 'Unknown NPY'
+                         }));
+
+
+                    } catch (error) {
+                        console.error('NPY Image generation failed:', error);
+                        npyImageError.value = 'NPY Image generation failed: ' + error.message;
+                    } finally {
+                        isProcessingNpyImages.value = false;
+                         // Остаемся на 'results', чтобы показать ошибку или результат
+                        currentStage.value = 'results';
+                    }
+                };
+
+                // --- Stage 4: Generate RGB Images from LAS ---
+                 const generateLasRgbImages = async () => {
+                     if (uploadedLasInfo.value.length === 0 || isProcessingLasRgbImages.value) return;
+
+                    isProcessingLasRgbImages.value = true;
+                    lasRgbImageError.value = null;
+                    lasRgbImageResults.value = null; // Очищаем предыдущие
+
+                    try {
+                         const lasInfo = uploadedLasInfo.value; // [{ lasFileId: string, originalName: string }, ...]
+
+                        // ПРЕДПОЛАГАЕМЫЙ БЭКЕНД ЭНДПОИНТ:
+                        // Принимает список объектов с ID и именами LAS-файлов. Генерирует RGB картинки. Сохраняет их.
+                        // Возвращает массив объектов с инфо о картинках.
+                        // Пример ответа: { success: true, images: [{ imageId: "rgb_img_uuid1", filename: "file1_rgb.png", previewUrl: "/preview/img/rgb_img_uuid1", downloadUrl: "/download/img/rgb_img_uuid1", sourceLasId: "uuid1" }, ...] }
+                        const response = await fetch('/api/v1/images/from-las-rgb', { // <<< ИЗМЕНИТЬ URL ЭНДПОИНТА
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ lasFilesInfo: lasInfo }) // Посылаем ID и имена
+                        });
+
+                         if (!response.ok) {
+                             const errorData = await response.json().catch(() => ({ detail: 'Server error during LAS RGB image generation.' }));
+                            throw new Error(errorData.detail || `HTTP error ${response.status}`);
+                        }
+
+                        const data = await response.json();
+                         if (!data.success || !data.images) {
+                             throw new Error(data.message || 'LAS RGB image generation response format incorrect.');
+                         }
+
+                         // Добавляем имя исходного LAS файла для отображения
+                         const sourceLasNames = lasInfo.reduce((acc, f) => { acc[f.lasFileId] = f.originalName; return acc; }, {});
+                         lasRgbImageResults.value = data.images.map(img => ({
+                            ...img,
+                            sourceLasName: sourceLasNames[img.sourceLasId] || 'Unknown LAS'
+                         }));
+
+                    } catch (error) {
+                        console.error('LAS RGB Image generation failed:', error);
+                        lasRgbImageError.value = 'LAS RGB Image generation failed: ' + error.message;
+                    } finally {
+                        isProcessingLasRgbImages.value = false;
+                        // Остаемся на 'results', чтобы показать ошибку или результат
+                        currentStage.value = 'results';
+                    }
+                 };
+
+                 // --- Reset ---
+                const resetProcess = () => {
+                    currentStage.value = 'upload';
+                    lasFiles.value = [];
+                    uploadedLasInfo.value = [];
+                    npyResults.value = null;
+                    npyImageResults.value = null;
+                    lasRgbImageResults.value = null;
+                    isUploading.value = false;
+                    isProcessingNpy.value = false;
+                    isProcessingNpyImages.value = false;
+                    isProcessingLasRgbImages.value = false;
+                    uploadError.value = null;
+                    npyError.value = null;
+                    npyImageError.value = null;
+                    lasRgbImageError.value = null;
                 };
 
                 return {
-                    currentTab,
-                    files,
-                    results,
-                    uploading,
+                    currentStage,
+                    lasFiles,
+                    uploadedLasInfo,
+                    npyResults,
+                    npyImageResults,
+                    lasRgbImageResults,
+                    isUploading,
+                    isProcessingNpy,
+                    isProcessingNpyImages,
+                    isProcessingLasRgbImages,
+                    uploadError,
+                    npyError,
+                    npyImageError,
+                    lasRgbImageError,
                     fileDragOver,
                     formatFileSize,
                     handleFileDrop,
                     handleFiles,
                     removeFile,
-                    uploadFiles
+                    uploadLasFiles,
+                    generateNpy,
+                    generateImagesFromNpy,
+                    generateLasRgbImages,
+                    resetProcess
                 };
             }
         }).mount('#app');
