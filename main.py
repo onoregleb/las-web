@@ -539,10 +539,10 @@ async def preview_image_file(file_id: str):
 @app.get("/health", include_in_schema=False)
 async def health_check():
     return {"status": "healthy", "message": "Server is running!"}
-
-# --- Запуск приложения (если используется uvicorn напрямую) ---
-if __name__ == "__main__":
-    import uvicorn
-    # Важно: reload=True удобно для разработки, но не для продакшена
-    # workers=N можно использовать для многопроцессорности в продакшене
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+#
+# # --- Запуск приложения (если используется uvicorn напрямую) ---
+# if __name__ == "__main__":
+#     import uvicorn
+#     # Важно: reload=True удобно для разработки, но не для продакшена
+#     # workers=N можно использовать для многопроцессорности в продакшене
+#     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
