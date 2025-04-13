@@ -1,5 +1,4 @@
 import asyncio
-import os
 import uuid
 import logging
 from typing import List, Dict, Any
@@ -36,7 +35,7 @@ PROCESS_DIR_IMG.mkdir(parents=True, exist_ok=True)
 app = FastAPI(
     title="LAS/LAZ Multi-Stage Processor API",
     # Увеличение максимального размера запроса, если нужно обрабатывать очень большие файлы
-    # max_request_size=1024 * 1024 * 1024 # 1 GB
+    max_request_size=512 * 1024 * 1024 # 1 GB
 )
 
 # --- Middleware ---
@@ -49,8 +48,6 @@ app.add_middleware(
 )
 
 # --- Шаблоны ---
-# Убедитесь, что папка templates находится рядом с main.py
-# и содержит ваш index.html
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 # --- Pydantic Модели для Запросов ---
@@ -68,7 +65,6 @@ class LasFilesInfo(BaseModel):
     lasFilesInfo: List[LasFileId]
 
 # --- Вспомогательные функции ---
-
 def save_upload_file(upload_file: UploadFile, destination: Path) -> None:
     """Синхронно сохраняет UploadFile."""
     try:
@@ -119,8 +115,6 @@ def generate_npy_from_las_sync(las_file_path: Path, npy_file_path: Path):
         # Сохраняем в NPY
         np.save(npy_file_path, points_array)
         logger.info(f"Successfully saved NPY file: {npy_file_path}")
-        # Дополнительно можно сохранить имена колонок, если нужно
-        # np.save(str(npy_file_path).replace('.npy', '_dims.npy'), np.array(point_dim_names))
 
     except FileNotFoundError:
         logger.error(f"LAS file not found for NPY generation: {las_file_path}")
@@ -539,10 +533,3 @@ async def preview_image_file(file_id: str):
 @app.get("/health", include_in_schema=False)
 async def health_check():
     return {"status": "healthy", "message": "Server is running!"}
-#
-# # --- Запуск приложения (если используется uvicorn напрямую) ---
-# if __name__ == "__main__":
-#     import uvicorn
-#     # Важно: reload=True удобно для разработки, но не для продакшена
-#     # workers=N можно использовать для многопроцессорности в продакшене
-#     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
