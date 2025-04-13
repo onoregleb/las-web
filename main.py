@@ -529,6 +529,54 @@ async def preview_image_file(file_id: str):
     return FileResponse(path=file_path, media_type='image/png')
 
 
+@app.post("/api/v1/reset")
+async def reset_files():
+    """
+    Удаляет все файлы в директориях uploads и processed.
+    """
+    try:
+        # Удаляем файлы из uploads/las
+        for file_path in UPLOAD_DIR_LAS.glob("*"):
+            try:
+                if file_path.is_file():
+                    file_path.unlink()
+                elif file_path.is_dir():
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                logger.error(f"Ошибка при удалении файла {file_path}: {e}")
+
+        # Удаляем файлы из processed/npy
+        for file_path in PROCESS_DIR_NPY.glob("*"):
+            try:
+                if file_path.is_file():
+                    file_path.unlink()
+                elif file_path.is_dir():
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                logger.error(f"Ошибка при удалении файла {file_path}: {e}")
+
+        # Удаляем файлы из processed/images
+        for file_path in PROCESS_DIR_IMG.glob("*"):
+            try:
+                if file_path.is_file():
+                    file_path.unlink()
+                elif file_path.is_dir():
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                logger.error(f"Ошибка при удалении файла {file_path}: {e}")
+
+        # Если нужно, можно создать директории заново, чтобы не нарушить последующую работу:
+        UPLOAD_DIR_LAS.mkdir(parents=True, exist_ok=True)
+        PROCESS_DIR_NPY.mkdir(parents=True, exist_ok=True)
+        PROCESS_DIR_IMG.mkdir(parents=True, exist_ok=True)
+
+        logger.info("Все файлы успешно удалены.")
+        return JSONResponse(content={"success": True, "message": "Файлы успешно удалены."})
+    except Exception as e:
+        logger.error(f"Ошибка сброса файлов: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Не удалось выполнить сброс файлов.")
+
+
 # --- Health Check ---
 @app.get("/health", include_in_schema=False)
 async def health_check():

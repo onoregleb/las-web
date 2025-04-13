@@ -499,7 +499,21 @@
                  };
 
                  // --- Reset ---
-                const resetProcess = () => {
+                const resetProcess = async () => {
+                    try {
+                        // Вызываем новый endpoint для сброса файлов на сервере
+                        const response = await fetch('/api/v1/reset', {
+                            method: 'POST'
+                        });
+                        if (!response.ok) {
+                            const errorData = await response.json().catch(() => ({}));
+                            throw new Error(errorData.detail || `Ошибка HTTP ${response.status}`);
+                        }
+                    } catch (error) {
+                        console.error('Ошибка сброса на сервере:', error);
+                        // Можно также оповестить пользователя об ошибке
+                        alert('Ошибка сброса: ' + error.message);
+                    }
                     currentStage.value = 'upload';
                     lasFiles.value = [];
                     uploadedLasInfo.value = [];
