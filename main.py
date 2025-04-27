@@ -35,7 +35,7 @@ PROCESS_DIR_IMG.mkdir(parents=True, exist_ok=True)
 app = FastAPI(
     title="LAS/LAZ Multi-Stage Processor API",
     # Увеличение максимального размера запроса, если нужно обрабатывать очень большие файлы
-    max_request_size=512 * 1024 * 1024 # 1 GB
+    max_request_size=512 * 1024 * 1024
 )
 
 # --- Middleware ---
